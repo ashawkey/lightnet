@@ -1,4 +1,4 @@
-# LightNet
+# lightnet
 
 lightnet is a simple implementation of convolutional neural network for myself to understand the basic ideas about how to build a neural network, especially about back propagation algorithm and optimization.
 
