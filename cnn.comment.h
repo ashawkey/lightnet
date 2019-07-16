@@ -13,6 +13,11 @@ using namespace std;
 
 template<class T>
 class tensor {
+/*
+    tensor class
+    * shape: vector<int>, tensor shape, eg. {3,3} matrix
+    * size: int, num of elements, eg. 9 = 3 * 3
+ */
 public:
 	T* data = NULL;
 	T* grad = NULL;
@@ -25,6 +30,7 @@ public:
 
 	tensor() {}
 
+    // constructor by shape
 	tensor(const vector<int>& shape, bool require_grad = false) {
 		this->shape = shape;
 		this->require_grad = require_grad;
@@ -42,16 +48,18 @@ public:
 		}
 	}
 
+    // copy constructor, call operator=, for parameter passing.
 	tensor(const tensor<T>& other) {
 		if (this != &other) *this = other;
 	}
 
+    // operator=, for assignment.
 	tensor<T>& operator=(const tensor<T>& other) {
 		shape = other.shape;
 		size = other.size;
 		require_grad = other.require_grad;
-		delete[] data;
-		data = new T[size];
+		delete[] data; // delete original data first [!! avoid memory leak !!]
+		data = new T[size]; // reallocate
 		memcpy(data, other.data, size * sizeof(T));
 		if (require_grad) {
 			delete[] grad;
@@ -67,13 +75,14 @@ public:
 		return *this;
 	}
 
+    // set gradient from tensor
 	void set_grad(const tensor<T>& grad_tensor) {
 		assert(require_grad);
 		memcpy(grad, grad_tensor.data, size * sizeof(T));
 	}
 
+    // random init, inplace, float tensor use only
 	void init_randn(float mean = 0, float variance = 1) {
-		// float tensor use only
 		random_device device;
 		default_random_engine generator(device());
 		normal_distribution<float> distribution(mean, variance);
@@ -81,6 +90,7 @@ public:
 			data[i] = distribution(generator);
 	}
 
+    // xavier normal initialization method
 	void init_xavier() {
 		int sum_shape = 0;
 		for (int i : shape) sum_shape += i;
@@ -88,6 +98,7 @@ public:
 		init_randn(0, std);
 	}
 
+    // index converter
 	vector<int> int2vec(int index) const {
 		assert(index < size);
 		vector<int> res;
@@ -101,6 +112,7 @@ public:
 		return res;
 	}
 
+    // index converter
 	int vec2int(vector<int> index) const {
 		assert(index.size() == shape.size());
 		int pos = 0;
@@ -113,28 +125,32 @@ public:
 		return pos;
 	}
 
+    // index operator, mutable version
 	T& operator[] (vector<int> index) {
-		// supporting broadcast
 		assert(index.size() == shape.size());
-		for (int i = 0; i < index.size(); i++) index[i] %= shape[i];
+		for (int i = 0; i < index.size(); i++) index[i] %= shape[i]; // supporting broadcast
 		return data[vec2int(index)];
 	}
 
+    // index operator, constant version [!! necessary !!]
 	T operator[] (vector<int> index) const {
 		assert(index.size() == shape.size());
-		for (int i = 0; i < index.size(); i++) index[i] %= shape[i];
+		for (int i = 0; i < index.size(); i++) index[i] %= shape[i]; // supporting broadcast
 		return data[vec2int(index)];
 	}
 
+    // raw index operator, mutable version
 	T& operator[] (int index) {
 		// not supporting broadcast, avoid using directly!
 		return data[index];
 	}
 
+    // raw index operator, constant version
 	T operator[] (int index) const {
 		return data[index];
 	}
 
+    /// arithmetic operator reload
 	tensor<T> operator+ (const tensor<T>& other) const {
 		assert(shape.size() == other.shape.size());
 		if (size == other.size) {
@@ -251,12 +267,14 @@ public:
 		return a / b;
 	}
 
+    // unary minus operator, eg. -t
 	tensor<T> operator- () const {
 		tensor<T> res(shape);
 		for (int i = 0; i < size; i++) res[i] = -data[i];
 		return res;
 	}
 
+    // convenient output
 	friend ostream& operator<<(ostream& out, const tensor<T>& t) {
 		out << "<tensor: ";
 		for (int i = 0; i < t.shape.size(); i++) {
@@ -280,6 +298,7 @@ public:
 		return out;
 	}
 
+    /// math operations
 	tensor<T> exp() {
 		tensor<T> res(*this);
 		for (int i = 0; i < size; i++) res[i] = std::exp(res[i]);
@@ -292,6 +311,7 @@ public:
 		return res;
 	}
 
+    // mimics PyTorch, only change shape.
 	tensor<T> view(vector<int> new_shape) {
 		int new_size = 1;
 		for (int i = 0; i < new_shape.size(); i++) new_size *= new_shape[i];
@@ -301,6 +321,7 @@ public:
 		return res;
 	}
 
+    // transpose matrix
 	tensor<T> transpose() {
 		assert(shape.size() == 2);
 		tensor<T> res({ shape[1], shape[0] });
@@ -312,6 +333,7 @@ public:
 		return res;
 	}
 
+    // matrix multiplication (not supporting batch)
 	static tensor<T> matmul(const tensor<T>& a, const tensor<T>& b) {
 		assert(a.shape.size() == 2 && b.shape.size() == 2);
 		assert(a.shape[1] == b.shape[0]);
@@ -326,6 +348,7 @@ public:
 		return res;
 	}
 
+    // max over axis, retain shape. eg. [3,3] ---max(1)--> [3,1]
 	tensor<T> max(int axis) const {
 		assert(axis < shape.size());
 		vector<int> new_shape(shape);
@@ -339,8 +362,8 @@ public:
 		return res;
 	}
 
+    // sum over axis
 	tensor<T> sum(int axis) const {
-		// sum over axis, retain shape.
 		assert(axis < shape.size());
 		vector<int> new_shape(shape);
 		new_shape[axis] = 1;
@@ -353,6 +376,7 @@ public:
 		return res;
 	}
 
+    // max over all elements
 	T max() const {
 		T res = 0;
 		for (int i = 0; i < size; i++) res = max(res, data[i]);
@@ -369,6 +393,7 @@ public:
 		return sum() / float(size);
 	}
 
+    // destructor
 	~tensor() {
 		delete[] data;
 		if (require_grad) {
@@ -378,6 +403,7 @@ public:
 		}
 	}
 };
+
 
 tensor<int> onehot_to_categorical(tensor<float>& x) {
 	int batch_size = x.shape[0];
