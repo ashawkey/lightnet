@@ -17,7 +17,7 @@ class tensor {
     tensor class
     * shape: vector<int>, tensor shape, eg. {3,3} matrix
     * size: int, num of elements, eg. 9 = 3 * 3
- */
+*/
 public:
 	T* data = NULL;
 	T* grad = NULL;

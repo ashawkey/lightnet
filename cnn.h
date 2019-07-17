@@ -73,7 +73,6 @@ public:
 	}
 
 	void init_randn(float mean = 0, float variance = 1) {
-		// float tensor use only
 		random_device device;
 		default_random_engine generator(device());
 		normal_distribution<float> distribution(mean, variance);
@@ -114,7 +113,6 @@ public:
 	}
 
 	T& operator[] (vector<int> index) {
-		// supporting broadcast
 		assert(index.size() == shape.size());
 		for (int i = 0; i < index.size(); i++) index[i] %= shape[i];
 		return data[vec2int(index)];
@@ -127,7 +125,6 @@ public:
 	}
 
 	T& operator[] (int index) {
-		// not supporting broadcast, avoid using directly!
 		return data[index];
 	}
 
@@ -142,7 +139,7 @@ public:
 			for (int i = 0; i < size; i++) res[i] += other[i];
 			return res;
 		}
-		else if (other.size < size) { // very dangerous broadcast
+		else if (other.size < size) {
 			for (int i = 0; i < shape.size(); i++) assert(shape[i] % other.shape[i] == 0);
 			tensor<T> res(*this);
 			for (int i = 0; i < size; i++) {
@@ -340,7 +337,6 @@ public:
 	}
 
 	tensor<T> sum(int axis) const {
-		// sum over axis, retain shape.
 		assert(axis < shape.size());
 		vector<int> new_shape(shape);
 		new_shape[axis] = 1;
@@ -403,10 +399,6 @@ public:
 		lr = _lr;
 	}
 	virtual void update_weight(tensor<float>& w) = 0;
-	/* 
-	optimization method reference:
-		* http://ruder.io/optimizing-gradient-descent/index.html#stochasticgradientdescent
-	*/
 };
 
 class SGD : public optimizer {
@@ -450,7 +442,6 @@ public:
 	}
 };
 
-
 class layer {
 public:
 	layer() {}
@@ -484,15 +475,6 @@ public:
 	}
 
 	tensor<float> forward(tensor<float>& _in) {
-		/*
-		warning: very naive implementation.
-		data shape:
-			weights: [K0, K1, fin, fout]
-			--> in: [B, H, W, fin]       |    out: [B, nH, nW, fout] -->
-			<-- grad_out: [B, H, W, fin] | grad_in: [B, nH, nW, fin] <--
-		reference:
-			* https://becominghuman.ai/back-propagation-in-convolutional-neural-networks-intuition-and-code-714ef1c38199
-		 */
 		in = _in;
 		batch_size = in.shape[0];
 		H = in.shape[1];
@@ -524,15 +506,12 @@ public:
 	}
 
 	tensor<float> backward(tensor<float>& grad_in, optimizer* optim) {
-		// grad_in: [B, nH, nW, fout]
 		grad_out = tensor<float>(in.shape); // [B, H, W, fin] 
 		grad_weights = tensor<float>(weights.shape); // [K0, K1, fin, fout]
-		// conv
 		for (int b = 0; b < batch_size; b++) {
 			for (int i = -padding[0]; i < nH + padding[0]; i += stride[0]) {
 				for (int j = -padding[1]; j < nW + padding[1]; j += stride[1]) {
 					for (int k = 0; k < fout; k++) {
-						// kernel
 						for (int ii = 0; ii < kernel_size[0]; ii++) {
 							for (int jj = 0; jj < kernel_size[1]; jj++) {
 								for (int kk = 0; kk < fin; kk++) {
@@ -550,7 +529,6 @@ public:
 				}
 			}
 		}
-		// update weights
 		weights.set_grad(grad_weights);
 		optim->update_weight(weights);
 		return grad_out;
@@ -575,34 +553,16 @@ public:
 	tensor<float> forward(tensor<float>& _in) {
 		in = _in;
 		out = tensor<float>::matmul(in, weights) + bias;
-		/*
-		cout << "linear forward start" << endl;
-		cout << "in: " << in << endl;
-		cout << "w: " << weights << endl;
-		cout << "b: " << bias << endl;
-		cout << "out: " << out << endl;
-		cout << "linear forward end" << endl;
-		*/
 		return out;
 	}
 
 	tensor<float> backward(tensor<float>& grad_in, optimizer* optim) {
-		/*
-		data shape:
-			--> in: [B, fin]       | out: [B, fout]     -->
-			<-- grad_out: [B, fin] | grad_in: [B, fout] <--
-		back propagation reference:
-			* https://eli.thegreenplace.net/2018/backpropagation-through-a-fully-connected-layer/
-		*/
-		// grads w.r.t weights & bias
 		tensor<float> grad_weights = tensor<float>::matmul(in.transpose(), grad_in);
 		tensor<float> grad_bias = grad_in.sum(0);
 		weights.set_grad(grad_weights); // [fin, fout]
 		bias.set_grad(grad_bias); // [1, fout]
-		// update weights
 		optim->update_weight(weights);
 		optim->update_weight(bias);
-		// grads w.r.t inputs
 		grad_out = tensor<float>::matmul(grad_in, weights.transpose());
 		return grad_out;
 	}
@@ -616,7 +576,6 @@ public:
 	flatten() {}
 
 	tensor<float> forward(tensor<float>& _in) {
-		// in: [B, H, W, C]
 		in = _in;
 		batch_size = in.shape[0];
 		out = in.view({ batch_size, in.size / batch_size });
@@ -674,12 +633,10 @@ public:
 		nH = H / stride[0];
 		nW = W / stride[1];
 		out = tensor<float>({ batch_size, nH, nW, fin });
-		// max pool
 		for (int b = 0; b < batch_size; b++) {
 			for (int i = 0; i < nH; i += stride[0]) {
 				for (int j = 0; j < nW; j += stride[1]) {
 					for (int k = 0; k < fin; k++) {
-						// kernel
 						for (int ii = 0; ii < kernel_size[0]; ii++) {
 							for (int jj = 0; jj < kernel_size[1]; jj++) {
 								int ni = i + ii;
@@ -698,12 +655,10 @@ public:
 	}
 	tensor<float> backward(tensor<float>& grad_in, optimizer* optim) {
 		grad_out = tensor<float>({ batch_size, H, W, fin });
-		// max pool
 		for (int b = 0; b < batch_size; b++) {
 			for (int i = 0; i < nH; i += stride[0]) {
 				for (int j = 0; j < nW; j += stride[1]) {
 					for (int k = 0; k < fin; k++) {
-						// kernel
 						for (int ii = 0; ii < kernel_size[0]; ii++) {
 							for (int jj = 0; jj < kernel_size[1]; jj++) {
 								int ni = i + ii;
@@ -726,7 +681,7 @@ public:
 
 class dropout : public layer {
 public:
-	float p; // probability to keep
+	float p;
 	tensor<bool> hit;
 
 	dropout(float _p = 0.5) {
@@ -764,7 +719,6 @@ public:
 };
 
 tensor<float> softmax(const tensor<float>& in) {
-	// in: [B, f]
 	int batch_size = in.shape[0];
 	tensor<float> in_exp = (in - in.max(1)).exp();
 	tensor<float> res = in_exp / in_exp.sum(1);
@@ -783,12 +737,9 @@ public:
 	}
 
 	tensor<float> forward(tensor<float>& in, tensor<float>& _target) {
-		// in = [B, f], _target = [B, f] (one_hot)
 		this->target = onehot_to_categorical(_target);
 		batch_size = in.shape[0];
-		// softmax
 		out = softmax(in);
-		// cross entropy
 		loss = tensor<float>({ batch_size, 1 });
 		for (int b = 0; b < batch_size; b++)
 			loss[{b, 0}] = -log(out[{b, target[{b, 0}]}]);
@@ -796,10 +747,6 @@ public:
 	}
 
 	tensor<float> backward() {
-		/*
-		reference:
-			* https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative
-		*/
 		grad_out = tensor<float>({ batch_size, num_classes });
 		for (int b = 0; b < batch_size; b++) {
 			for (int i = 0; i < num_classes; i++) {
@@ -822,7 +769,6 @@ public:
 	l2_loss() {}
 
 	tensor<float> forward(tensor<float>& in, tensor<float>& target) {
-		// in = [B, ...], target = [B, ...]
 		this->target = target;
 		out = in - target;
 		loss = out * out;
@@ -834,8 +780,6 @@ public:
 		return grad_out;
 	}
 };
-
-
 
 class model {
 public:
@@ -864,16 +808,13 @@ public:
 	}
 
 	float train_step(tensor<float>& input, tensor<float>& target) {
-		// forward
 		tensor<float> x = input;
 		for (int i = 0; i < layers.size(); i++) {
 			layer* l = layers[i];
 			x = l->forward(x);
 		}
-		// loss function
 		loss = loss_layer->forward(x, target);
 		grad = loss_layer->backward();
-		// backward
 		for (int i = layers.size() - 1; i >= 0; i--) {
 			layer* l = layers[i];
 			grad = l->backward(grad, optim);

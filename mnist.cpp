@@ -59,10 +59,10 @@ vector<instance*> read_test_cases(int batch_size, int size=60000)
 int main() {
 
 	int MAX_EPOCH = 100;
-	float PART = 0.8;
-	int DATASET_SIZE = 1000;
+	int DATASET_SIZE = 1000; // max 60000
 	int NUM_CLASSES = 10;
-	int BATCH_SIZE = 32;
+	int BATCH_SIZE = 16;
+	float PART = 0.8;
 
 
 	cout << "==> Loading data.. " << endl;
@@ -72,11 +72,13 @@ int main() {
 
 	model cls_machine = model();
 
-	cls_machine.add_layer(new conv2d(1, 3, 3)); // [28, 28, 1] -> [26, 26, 4]
-	cls_machine.add_layer(new maxpool2d(2, 2)); // [26, 26, 4] -> [13, 13, 4]
+	cls_machine.add_layer(new conv2d(1, 4, 5)); // [28, 28, 1] -> [24, 24, 4]
+	cls_machine.add_layer(new maxpool2d(2, 2)); // [24, 24, 4] -> [12, 12, 4]
+	cls_machine.add_layer(new relu());
+	cls_machine.add_layer(new conv2d(4, 8, 5)); // [12, 12, 4] -> [8, 8, 8]
 	cls_machine.add_layer(new relu());
 	cls_machine.add_layer(new flatten());
-	cls_machine.add_layer(new linear(13 * 13 * 3, NUM_CLASSES));
+	cls_machine.add_layer(new linear(8 * 8 * 8, NUM_CLASSES));
 
 	cls_machine.set_optimizer(new Adam(0.001));
 	cls_machine.set_loss(new softmax_cross_entropy_loss(NUM_CLASSES));
@@ -88,12 +90,13 @@ int main() {
 		int total_case = 0;
 		for (int i = 0; i < dataset.size(); i++) {
 			instance* in = dataset[i];
-			cout << i << endl;
 			if (i < dataset.size() * PART) {
+				cout << " train " << i << endl;
 				float loss = cls_machine.train_step(in->x, in->y);
 				total_loss += loss;
 			}
 			else {
+				cout << " eval " << i << endl;
 				tensor<float> logits = softmax(cls_machine.evaluate_step(in->x));
 				tensor<int> preds = onehot_to_categorical(logits);
 				tensor<int> truths = onehot_to_categorical(in->y);
